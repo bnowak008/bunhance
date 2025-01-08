@@ -1,18 +1,51 @@
 {
   "name": "bunhance",
   "version": "0.0.1",
-  "module": "index.ts",
+  "description": "Ultra-fast terminal styling library optimized for Bun",
+  "module": "./dist/esm/index.js",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/types/index.d.ts",
   "type": "module",
-  "main": "index.ts",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs",
+    "build:clean": "rm -rf dist",
+    "build:types": "tsc --emitDeclarationOnly --declaration --declarationDir dist/types",
+    "build:esm": "bun build ./src/index.ts --outdir ./dist/esm --target node --minify",
+    "build:cjs": "bun build ./src/index.ts --outdir ./dist/cjs --target node --minify --format cjs",
+    "prepare": "npm version patch && bun run build",
+    "publish": "bun run prepare && npm publish",
     "example": "bun run examples/demo.ts",
     "test": "bun test"
   },
+  "keywords": [
+    "bun",
+    "terminal",
+    "colors",
+    "styling",
+    "cli",
+    "ansi"
+  ],
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
   }
 }

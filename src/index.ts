@@ -2,7 +2,7 @@ import { ANSI_CODES, rgb, bgRgb, color256, bgColor256 } from "./ansi";
 import { generateGradient } from "./gradient";
 import { getStyle, setStyle } from "./cache";
 import { validateRGB, validate256Color } from "./validation";
-import type { StyleConfig, StyleFunction, ANSICode, GradientColor, RGB, AnimationEffectOptions, MatrixConfig } from "./types";
+import type { StyleConfig, StyleFunction, ANSICode, GradientColor, RGB, RGBTuple, AnimationEffectOptions } from "./types";
 import { hslToRgb } from "./color";
 import { rainbow, pulse, wave, type as typeAnim, glitch, sparkle, zoom, rotate, slide, start, stop } from "./animation";
 
@@ -169,6 +169,35 @@ function createStyleFunction(): StyleFunction {
   // Animation control methods
   fn.start = start;
   fn.stop = stop;
+
+  // Block creation methods
+  fn.block = (width: number = 1, height: number = 1) => {
+    const block = '█'.repeat(width);
+    const lines = Array(height).fill(block);
+    return fn(lines.join('\n'));
+  };
+
+  fn.colorBlock = (color: RGBTuple, width: number = 1, height: number = 1) => {
+    return fn.rgb(color[0], color[1], color[2]).block(width, height);
+  };
+
+  fn.bgBlock = (width: number = 1, height: number = 1) => {
+    const block = ' '.repeat(width);
+    const lines = Array(height).fill(block);
+    return fn.bgRgb(0, 0, 0)(lines.join('\n')); // Default black background
+  };
+
+  fn.bgColorBlock = (color: RGBTuple, width: number = 1, height: number = 1) => {
+    const block = ' '.repeat(width);
+    const lines = Array(height).fill(block);
+    return fn.bgRgb(color[0], color[1], color[2])(lines.join('\n'));
+  };
+
+  fn.gradientBlock = (colors: GradientColor[], width: number = 1, height: number = 1) => {
+    const block = '█'.repeat(width);
+    const lines = Array(height).fill(block);
+    return fn.gradient(...colors)(lines.join('\n'));
+  };
 
   return fn;
 }
