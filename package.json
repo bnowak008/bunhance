@@ -1,0 +1,18 @@
+{
+  "name": "bunhance",
+  "version": "0.0.1",
+  "module": "index.ts",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "example": "bun run examples/demo.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
