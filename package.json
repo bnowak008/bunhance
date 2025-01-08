@@ -1,6 +1,6 @@
 {
   "name": "bunhance",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Ultra-fast terminal styling library optimized for Bun",
   "module": "./dist/esm/index.js",
   "main": "./dist/cjs/index.js",
