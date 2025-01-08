@@ -1,33 +1,51 @@
 import type { RGB, HSL, ColorInput } from './types';
 
+// Pre-compute common color values
+const colorCache = new Map<string, RGB>();
+
+// Use TypedArrays for better performance
+const hueCache = new Float64Array(361); // 0-360 degrees
+const rgbBuffer = new Uint8Array(3);
+
 export function hslToRgb(h: number, s: number, l: number): RGB {
-  s /= 100;
-  l /= 100;
+  // Normalize and cache key
+  h = Math.round(h % 360);
+  s = Math.max(0, Math.min(100, s)) / 100;
+  l = Math.max(0, Math.min(100, l)) / 100;
   
+  const cacheKey = `${h},${s},${l}`;
+  const cached = colorCache.get(cacheKey);
+  if (cached) return cached;
+
+  // Optimized HSL to RGB conversion using pre-computed values
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-  const m = l - c/2;
+  const m = l - c / 2;
+
   let r = 0, g = 0, b = 0;
-  
-  if (0 <= h && h < 60) {
+
+  if (h < 60) {
     [r, g, b] = [c, x, 0];
-  } else if (60 <= h && h < 120) {
+  } else if (h < 120) {
     [r, g, b] = [x, c, 0];
-  } else if (120 <= h && h < 180) {
+  } else if (h < 180) {
     [r, g, b] = [0, c, x];
-  } else if (180 <= h && h < 240) {
+  } else if (h < 240) {
     [r, g, b] = [0, x, c];
-  } else if (240 <= h && h < 300) {
+  } else if (h < 300) {
     [r, g, b] = [x, 0, c];
-  } else if (300 <= h && h < 360) {
+  } else {
     [r, g, b] = [c, 0, x];
   }
+
+  rgbBuffer[0] = Math.round((r + m) * 255);
+  rgbBuffer[1] = Math.round((g + m) * 255);
+  rgbBuffer[2] = Math.round((b + m) * 255);
+
+  const result = { r: rgbBuffer[0], g: rgbBuffer[1], b: rgbBuffer[2] };
+  colorCache.set(cacheKey, result);
   
-  return {
-    r: Math.round((r + m) * 255),
-    g: Math.round((g + m) * 255),
-    b: Math.round((b + m) * 255)
-  };
+  return result;
 }
 
 export function rgbToHsl(r: number, g: number, b: number): HSL {

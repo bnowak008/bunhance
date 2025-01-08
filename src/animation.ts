@@ -1,5 +1,5 @@
 import type { RGB, AnimationOptions, Frame, SparkleConfig, AnimationEffectOptions } from './types';
-import { hslToRgb, rgbToHsl } from './color';
+import { hslToRgb } from './color';
 import { Easing } from './easing';
 
 // Terminal control helpers
@@ -15,37 +15,87 @@ const terminal = {
   reset: '\x1B[0m'
 };
 
-type AnimationState = {
+// Updated AnimationState type to match our implementation
+interface AnimationState {
   frames: Frame[];
-  interval: number | null;
   currentFrame: number;
-  options: AnimationOptions;
+  isPlaying: boolean;
+  lastFrameTime: number;
+  fps: number;
+  timer: typeof Bun.sleep | typeof setTimeout;
+  buffer: Uint8Array;
+  interval?: NodeJS.Timeout | null;
+  options?: AnimationOptions;
   cleanup?: () => void;
-};
+}
 
-// Keep track of active animation
-let currentAnimation: AnimationState | null = null;
+// Pre-allocate buffers for animation frames
+const frameBuffer = new Uint8Array(1024);
 
-function createState(options: AnimationOptions = {}): AnimationState {
+// Use Bun's native performance API
+const now = () => performance.now();
+
+function createAnimationState(options: AnimationOptions = {}): AnimationState {
   return {
     frames: [],
-    interval: null,
     currentFrame: 0,
-    options: {
-      fps: options.fps ?? 30,
-      loop: options.loop ?? true,
-      autoplay: options.autoplay ?? false
-    }
+    isPlaying: false,
+    lastFrameTime: 0,
+    fps: options.fps || 30,
+    timer: typeof Bun !== 'undefined' ? Bun.sleep : setTimeout,
+    buffer: frameBuffer,
+    interval: null,
+    options,
+    cleanup: undefined
   };
 }
 
-function addFrame(state: AnimationState, text: string, color: RGB, duration: number = 1): AnimationState {
+export function start(state: AnimationState, onFrame?: (frame: Frame) => void) {
+  if (state.isPlaying) return;
+  state.isPlaying = true;
+  state.lastFrameTime = now();
+
+  const frameInterval = 1000 / state.fps;
+
+  async function animate() {
+    if (!state.isPlaying) return;
+
+    const currentTime = now();
+    const delta = currentTime - state.lastFrameTime;
+
+    if (delta >= frameInterval) {
+      const frame = state.frames[state.currentFrame];
+      if (onFrame) onFrame(frame);
+
+      state.currentFrame = (state.currentFrame + 1) % state.frames.length;
+      state.lastFrameTime = currentTime;
+    }
+
+    // Use Bun.sleep for more precise timing
+    if (typeof Bun !== 'undefined') {
+      await Bun.sleep(Math.max(0, frameInterval - delta));
+    } else {
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, frameInterval - delta)));
+    }
+
+    if (state.isPlaying) {
+      if (typeof window !== 'undefined') {
+        requestAnimationFrame(animate);
+      } else {
+        animate();
+      }
+    }
+  }
+
+  animate();
+}
+
+function addFrame(state: AnimationState, text: string, color: RGB, duration: number = 1): void {
   state.frames.push({ text, color, duration });
-  return state;
 }
 
 function rainbow(text: string, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps });
+  const state = createAnimationState({ fps: options.fps });
   const { steps = 60 } = options;
   const saturation = 100;
   const lightness = 50;
@@ -61,7 +111,7 @@ function rainbow(text: string, options: AnimationEffectOptions = {}): AnimationS
 }
 
 function pulse(text: string, color: RGB, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps });
+  const state = createAnimationState({ fps: options.fps });
   const { steps = 20 } = options;
   const { minBrightness = 0.3, maxBrightness = 1.0 } = options.transform || {};
 
@@ -95,7 +145,7 @@ function pulse(text: string, color: RGB, options: AnimationEffectOptions = {}): 
 }
 
 function wave(text: string, color: RGB, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps });
+  const state = createAnimationState({ fps: options.fps });
   const { steps = 30, easing = Easing.easeInOutCubic } = options;
   const chars = text.split('');
   const delay = Math.floor(steps / chars.length);
@@ -119,18 +169,21 @@ function wave(text: string, color: RGB, options: AnimationEffectOptions = {}): A
 }
 
 function type(text: string, color: RGB, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps ?? 20 });
+  const state = createAnimationState({ fps: options.fps ?? 20 });
   const { steps = text.length, easing = Easing.linear } = options;
   const chars = text.split('');
-  let lastLength = 0;
 
   // Save cursor position at start
-  process.stdout.write(terminal.save + terminal.hideCursor);
+  if (typeof process !== 'undefined' && process.stdout) {
+    process.stdout.write(terminal.save + terminal.hideCursor);
+  }
 
   state.cleanup = () => {
-    process.stdout.write(terminal.showCursor + terminal.restore);
-    process.stdout.write(terminal.clearLine);
-    process.stdout.write(terminal.reset);
+    if (typeof process !== 'undefined' && process.stdout) {
+      process.stdout.write(terminal.showCursor + terminal.restore);
+      process.stdout.write(terminal.clearLine);
+      process.stdout.write(terminal.reset);
+    }
   };
 
   for (let i = 0; i <= chars.length; i++) {
@@ -141,14 +194,13 @@ function type(text: string, color: RGB, options: AnimationEffectOptions = {}): A
     const frame = terminal.clearLine + 
                  `\x1b[38;2;${color.r};${color.g};${color.b}m${currentText}${terminal.reset}`;
     addFrame(state, frame, color);
-    lastLength = currentText.length;
   }
 
   return state;
 }
 
 function glitch(text: string, color: RGB, intensity: number = 1, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps });
+  const state = createAnimationState({ fps: options.fps });
   const { steps = 30 } = options;
   const chars = text.split('');
 
@@ -170,7 +222,7 @@ function glitch(text: string, color: RGB, intensity: number = 1, options: Animat
 }
 
 function sparkle(text: string, color: RGB, config: SparkleConfig = {}): AnimationState {
-  const state = createState({ fps: config.fps ?? 12 });
+  const state = createAnimationState({ fps: config.fps ?? 12 });
   const {
     chars = ['*'],
     frequency = 0.08,
@@ -203,7 +255,7 @@ function sparkle(text: string, color: RGB, config: SparkleConfig = {}): Animatio
 }
 
 function zoom(text: string, color: RGB, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps });
+  const state = createAnimationState({ fps: options.fps });
   const { steps = 30, easing = Easing.easeOutElastic } = options;
   const { scale = 2 } = options.transform || {};
 
@@ -220,7 +272,7 @@ function zoom(text: string, color: RGB, options: AnimationEffectOptions = {}): A
 }
 
 function rotate(text: string, color: RGB, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps });
+  const state = createAnimationState({ fps: options.fps });
   const { steps = 30, easing = Easing.easeOutElastic } = options;
   const chars = ['/', '─', '\\', '|'];
 
@@ -236,7 +288,7 @@ function rotate(text: string, color: RGB, options: AnimationEffectOptions = {}):
 }
 
 function slide(text: string, color: RGB, options: AnimationEffectOptions = {}): AnimationState {
-  const state = createState({ fps: options.fps });
+  const state = createAnimationState({ fps: options.fps });
   const { steps = 30, easing = Easing.easeOutCubic } = options;
   const { direction = 'left', maxWidth = 40 } = options.transform || {};
 
@@ -266,66 +318,49 @@ function slide(text: string, color: RGB, options: AnimationEffectOptions = {}): 
   return state;
 }
 
-function start(state: AnimationState, onFrame?: (frame: Frame) => void): void {
-  // Stop any existing animation
-  if (currentAnimation) {
-    stop(currentAnimation);
-  }
-
-  // Set as current animation
-  currentAnimation = state;
-
-  // Save cursor position only once at the start
-  if (!state.interval) {
-    process.stdout.write(terminal.save + terminal.hideCursor);
-  }
-
-  const frameTime = 1000 / (state.options.fps ?? 30);
-  
-  const animate = () => {
-    const frame = state.frames[state.currentFrame];
-    // Only move cursor back to saved position and write the new frame
-    process.stdout.write(terminal.restore + frame.text);
-    onFrame?.(frame);
-
-    state.currentFrame += 1;
-    if (state.currentFrame >= state.frames.length) {
-      if (state.options.loop) {
-        state.currentFrame = 0;
-      } else {
-        stop(state);
-      }
-    }
-  };
-
-  state.interval = setInterval(animate, frameTime) as unknown as number;
-  if (state.options.autoplay) {
-    animate();
-  }
-}
+let currentAnimation: AnimationState | null = null;
 
 function stop(state: AnimationState): void {
+  state.isPlaying = false;
+  
   if (state.interval) {
     clearInterval(state.interval);
     state.interval = null;
   }
   
   if (currentAnimation === state) {
-    // Only restore cursor position and write the final frame with reset
-    const lastFrame = state.frames[state.frames.length - 1];
-    process.stdout.write(terminal.restore + lastFrame.text + terminal.reset);
-    process.stdout.write(terminal.showCursor);
+    if (state.cleanup) {
+      state.cleanup();
+    } else {
+      const lastFrame = state.frames[state.frames.length - 1];
+      process.stdout.write(terminal.restore + lastFrame.text + terminal.reset);
+      process.stdout.write(terminal.showCursor);
+    }
     currentAnimation = null;
   }
 }
 
 function chain(states: AnimationState[]): AnimationState {
+  if (!states.length) {
+    return createAnimationState({});
+  }
+
   const firstState = states[0];
-  const combinedState = createState(firstState.options);
+  const combinedState = createAnimationState({
+    ...firstState.options,
+    fps: firstState.fps
+  });
   
   states.forEach(state => {
-    combinedState.frames.push(...state.frames);
+    state.frames.forEach(frame => {
+      addFrame(combinedState, frame.text, frame.color, frame.duration);
+    });
   });
+
+  // Combine cleanup functions
+  combinedState.cleanup = () => {
+    states.forEach(state => state.cleanup?.());
+  };
 
   return combinedState;
 }
@@ -334,14 +369,13 @@ export {
   rainbow,
   pulse,
   wave,
-  type,
+  type as typeAnim,
   glitch,
   sparkle,
   zoom,
   rotate,
   slide,
-  start,
   stop,
   chain,
-  createState
+  createAnimationState
 };
