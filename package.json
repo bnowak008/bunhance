@@ -27,7 +27,7 @@
     "build:cjs": "bun build ./src/index.ts --outdir ./dist/cjs --target node --minify --format cjs",
     "prepare": "bun run build",
     "publish": "npm publish",
-    "example": "bun run examples/demo.ts",
+    "demo": "bun run examples/demo.ts",
     "test": "bun test"
   },
   "keywords": [

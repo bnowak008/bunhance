@@ -1,4 +1,4 @@
-import type { RGB, HSL, ColorInput } from './types';
+import type { RGB, HSL, ColorInput, GradientColor } from '../types';
 
 // Pre-compute common color values
 const colorCache = new Map<string, RGB>();
@@ -221,5 +221,42 @@ export function temperature(color: RGB, amount: number): RGB {
     (hsl.h + adjustment + 360) % 360,
     hsl.s,
     hsl.l
+  );
+}
+
+export function parseColor(color: GradientColor): RGB {
+  if (typeof color === 'object') {
+    if ('r' in color && 'g' in color && 'b' in color) {
+      return color as RGB;
+    }
+    if ('h' in color && 's' in color && 'l' in color) {
+      return hslToRgb(color.h, color.s, color.l);
+    }
+  }
+  if (typeof color === 'string' && color.startsWith('#')) {
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return { r, g, b };
+  }
+  throw new Error('Invalid color format');
+}
+
+export function interpolateRGB(color1: RGB, color2: RGB, t: number): RGB {
+  return {
+    r: Math.round(color1.r + (color2.r - color1.r) * t),
+    g: Math.round(color1.g + (color2.g - color1.g) * t),
+    b: Math.round(color1.b + (color2.b - color1.b) * t)
+  };
+}
+
+export function interpolateHSL(color1: RGB, color2: RGB, t: number): RGB {
+  const hsl1 = rgbToHsl(color1.r, color1.g, color1.b);
+  const hsl2 = rgbToHsl(color2.r, color2.g, color2.b);
+  
+  return hslToRgb(
+    hsl1.h + (hsl2.h - hsl1.h) * t,
+    hsl1.s + (hsl2.s - hsl1.s) * t,
+    hsl1.l + (hsl2.l - hsl1.l) * t
   );
 } 

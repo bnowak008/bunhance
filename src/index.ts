@@ -1,42 +1,108 @@
-import { ANSI_CODES, rgb, bgRgb, color256, bgColor256 } from "./ansi";
-import { generateGradient } from "./gradient";
-import { getStyle, setStyle } from "./cache";
-import { validateRGB, validate256Color } from "./validation";
-import type { StyleConfig, StyleFunction, ANSICode, GradientColor, RGB, RGBTuple, AnimationEffectOptions } from "./types";
-import { hslToRgb } from "./color";
-import { rainbow, pulse, wave, typeAnim, glitch, sparkle, zoom, rotate, slide, start, stop } from "./animation";
+import { ANSI_CODES, rgb, bgRgb, color256, bgColor256 } from "./core/ansi";
+import { createGradient } from "./styles/gradient";
+import { getStyle, setStyle } from "./core/cache";
+import { validateRGB, validate256Color } from "./core/validation";
+import type { 
+  StyleConfig, 
+  StyleFunction, 
+  ANSICode, 
+  GradientColor, 
+  RGB, 
+  RGBTuple, 
+  AnimationEffectOptions,
+  GradientOptions,
+} from "./types";
+import { hslToRgb } from "./styles/color";
+import { 
+  rainbow, 
+  pulse, 
+  wave, 
+  type, 
+  glitch, 
+  sparkle, 
+  zoom, 
+  rotate, 
+  slide
+} from "./animation/effects";
+import { 
+  createScreen, 
+  startScreen, 
+  stopScreen, 
+  setCell 
+} from './animation/manager';
+import { 
+  type UnifiedBuffer, 
+  acquireBuffer, 
+  releaseBuffer,
+  createBufferManager
+} from './core/buffer';
+import {
+  composeAnimations,
+} from './animation/engine';
+import {
+  transition
+} from './animation/effects';
+import type { Animation } from './types/animation';
+
+// Add new color handling functions
+function handleRGBColor(state: StyleState, r: number, g: number, b: number, isBackground = false): void {
+  validateRGB(r, g, b);
+  state.styles.push(isBackground ? bgRgb(r, g, b) : rgb(r, g, b));
+}
+
+function handleHSLColor(state: StyleState, h: number, s: number, l: number, isBackground = false): void {
+  const rgbColor = hslToRgb(h, s, l);
+  handleRGBColor(state, rgbColor.r, rgbColor.g, rgbColor.b, isBackground);
+}
+
+// Add type for state to improve type safety
+type StyleState = {
+  styles: string[];
+  gradientColors: readonly GradientColor[] | undefined;
+  gradientOptions?: GradientOptions;
+  buffer: UnifiedBuffer;
+};
 
 function createStyleFunction(): StyleFunction {
   // Use static encoder/decoder for better performance
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   
+  const bufferManager = createBufferManager();
+  const state: StyleState = {
+    styles: [],
+    gradientColors: undefined,
+    buffer: acquireBuffer(bufferManager, 'raw', 1024, 1)
+  };
+
+  // Update cleanup
+  const cleanup = () => {
+    releaseBuffer(bufferManager, state.buffer);
+    bufferManager.dispose();
+  };
+
+  // Add cleanup to window unload
+  if (typeof window !== 'undefined') {
+    window.addEventListener('unload', cleanup);
+  }
+
   // Pre-allocate common buffers for better performance
   const resetBytes = encoder.encode(ANSI_CODES.reset);
   const spaceBytes = encoder.encode(' ');
   const blockBytes = encoder.encode('█');
   const newlineBytes = encoder.encode(Bun.env.OS === 'windows' ? '\r\n' : '\n');
   
-  const state = {
-    styles: [] as string[],
-    gradientColors: undefined as readonly GradientColor[] | undefined,
-    // Pre-allocate a buffer for string operations
-    buffer: new Uint8Array(1024), // Initial size, will grow if needed
-    bufferView: new DataView(new ArrayBuffer(1024))
-  };
-
   // Helper function to ensure buffer size
   function ensureBufferSize(needed: number) {
-    if (state.buffer.length < needed) {
-      const newSize = Math.max(needed, state.buffer.length * 2);
-      state.buffer = new Uint8Array(newSize);
-      state.bufferView = new DataView(state.buffer.buffer);
+    if ((state.buffer.data as Uint8Array).length < needed) {
+      releaseBuffer(bufferManager, state.buffer);
+      state.buffer = acquireBuffer(bufferManager, 'raw', needed, 1);
     }
   }
 
   function apply(text: string): string {
     if (state.gradientColors) {
-      const result = generateGradient(state.gradientColors, text);
+      const result = createGradient(text, state.gradientColors);
       state.gradientColors = undefined;
       state.styles = [];
       return result;
@@ -58,12 +124,13 @@ function createStyleFunction(): StyleFunction {
     ensureBufferSize(totalSize);
     
     // Copy bytes efficiently
-    state.buffer.set(styleBytes, 0);
-    state.buffer.set(textBytes, styleBytes.length);
-    state.buffer.set(resetBytes, styleBytes.length + textBytes.length);
+    const rawBuffer = state.buffer.data as Uint8Array;
+    rawBuffer.set(styleBytes, 0);
+    rawBuffer.set(textBytes, styleBytes.length);
+    rawBuffer.set(resetBytes, styleBytes.length + textBytes.length);
     
     // Use subarray for exact size
-    const result = decoder.decode(state.buffer.subarray(0, totalSize));
+    const result = decoder.decode(rawBuffer.subarray(0, totalSize));
     
     setStyle(state.styles, text, result);
     state.styles = [];
@@ -82,13 +149,19 @@ function createStyleFunction(): StyleFunction {
     state.gradientColors = undefined;
 
     if (config.color && config.color in ANSI_CODES) {
-      state.styles.push(ANSI_CODES[config.color]);
+      state.styles.push(ANSI_CODES[config.color as keyof typeof ANSI_CODES]);
     }
     if (config.rgb) {
-      state.styles.push(rgb(config.rgb[0], config.rgb[1], config.rgb[2]));
+      handleRGBColor(state, config.rgb[0], config.rgb[1], config.rgb[2]);
     }
     if (config.bgRgb) {
-      state.styles.push(bgRgb(config.bgRgb[0], config.bgRgb[1], config.bgRgb[2]));
+      handleRGBColor(state, config.bgRgb[0], config.bgRgb[1], config.bgRgb[2], true);
+    }
+    if (config.hsl) {
+      handleHSLColor(state, config.hsl[0], config.hsl[1], config.hsl[2]);
+    }
+    if (config.bgHsl) {
+      handleHSLColor(state, config.bgHsl[0], config.bgHsl[1], config.bgHsl[2], true);
     }
     if (config.color256 !== undefined) {
       state.styles.push(color256(config.color256));
@@ -119,7 +192,7 @@ function createStyleFunction(): StyleFunction {
           state.gradientColors = undefined;
           return fn;
         }
-        state.styles.push(ANSI_CODES[key as ANSICode]);
+        state.styles.push(ANSI_CODES[key as keyof typeof ANSI_CODES]);
         return fn;
       }
     });
@@ -127,26 +200,22 @@ function createStyleFunction(): StyleFunction {
 
   // Color methods
   fn.rgb = (r: number, g: number, b: number) => {
-    validateRGB(r, g, b);
-    state.styles.push(rgb(r, g, b));
+    handleRGBColor(state, r, g, b);
     return fn;
   };
 
   fn.bgRgb = (r: number, g: number, b: number) => {
-    validateRGB(r, g, b);
-    state.styles.push(bgRgb(r, g, b));
+    handleRGBColor(state, r, g, b, true);
     return fn;
   };
 
   fn.hsl = (h: number, s: number, l: number) => {
-    const rgbColor = hslToRgb(h, s, l);
-    state.styles.push(rgb(rgbColor.r, rgbColor.g, rgbColor.b));
+    handleHSLColor(state, h, s, l);
     return fn;
   };
 
   fn.bgHsl = (h: number, s: number, l: number) => {
-    const rgbColor = hslToRgb(h, s, l);
-    state.styles.push(bgRgb(rgbColor.r, rgbColor.g, rgbColor.b));
+    handleHSLColor(state, h, s, l, true);
     return fn;
   };
 
@@ -162,8 +231,9 @@ function createStyleFunction(): StyleFunction {
     return fn;
   };
 
-  fn.gradient = (...colors: GradientColor[]) => {
+  fn.gradient = (colors: GradientColor[], options?: GradientOptions) => {
     state.gradientColors = colors;
+    state.gradientOptions = options;
     return fn;
   };
 
@@ -181,7 +251,7 @@ function createStyleFunction(): StyleFunction {
   };
 
   fn.type = (text: string, color: RGB, options?: AnimationEffectOptions) => {
-    return typeAnim(text, color, options);
+    return type(text, color, options);
   };
 
   fn.glitch = (text: string, color: RGB, intensity?: number, options?: AnimationEffectOptions) => {
@@ -204,34 +274,35 @@ function createStyleFunction(): StyleFunction {
     return slide(text, color, options);
   };
 
-  // Animation control methods
-  fn.start = start;
-  fn.stop = stop;
-
   // Block creation methods
   fn.block = (width: number = 1, height: number = 1) => {
-    const lineSize = blockBytes.length * width;
-    const totalSize = lineSize * height + (height - 1) * newlineBytes.length;
+    const buffer = acquireBuffer(bufferManager, 'raw', width * blockBytes.length + (height - 1), height);
+    const rawBuffer = buffer.data as Uint8Array;
     
-    ensureBufferSize(totalSize);
-    
-    // Create first line
-    for (let i = 0; i < width; i++) {
-      state.buffer.set(blockBytes, i * blockBytes.length);
+    try {
+      // Create first line
+      for (let i = 0; i < width; i++) {
+        rawBuffer.set(blockBytes, i * blockBytes.length);
+      }
+      
+      // Copy first line to other lines
+      const firstLine = rawBuffer.subarray(0, width * blockBytes.length);
+      let offset = width * blockBytes.length;
+      
+      for (let i = 1; i < height; i++) {
+        rawBuffer.set(newlineBytes, offset);
+        offset += newlineBytes.length;
+        rawBuffer.set(firstLine, offset);
+        offset += firstLine.length;
+      }
+      
+      const result = decoder.decode(rawBuffer.subarray(0, offset));
+      releaseBuffer(bufferManager, buffer);
+      return fn(result);
+    } catch (error) {
+      releaseBuffer(bufferManager, buffer);
+      throw error;
     }
-    
-    // Copy first line to other lines
-    const firstLine = state.buffer.subarray(0, lineSize);
-    let offset = lineSize;
-    
-    for (let i = 1; i < height; i++) {
-      state.buffer.set(newlineBytes, offset);
-      offset += newlineBytes.length;
-      state.buffer.set(firstLine, offset);
-      offset += lineSize;
-    }
-    
-    return fn(decoder.decode(state.buffer.subarray(0, totalSize)));
   };
 
   fn.colorBlock = (color: RGBTuple, width: number = 1, height: number = 1) => {
@@ -239,61 +310,91 @@ function createStyleFunction(): StyleFunction {
   };
 
   fn.bgBlock = (width: number = 1, height: number = 1) => {
-    const lineSize = spaceBytes.length * width;
-    const totalSize = lineSize * height + (height - 1) * newlineBytes.length;
+    const buffer = acquireBuffer(bufferManager, 'raw', width * spaceBytes.length + (height - 1), height);
+    const rawBuffer = buffer.data as Uint8Array;
     
-    ensureBufferSize(totalSize);
-    
-    // Create first line
-    for (let i = 0; i < width; i++) {
-      state.buffer.set(spaceBytes, i * spaceBytes.length);
+    try {
+      // Create first line
+      for (let i = 0; i < width; i++) {
+        rawBuffer.set(spaceBytes, i * spaceBytes.length);
+      }
+      
+      // Copy first line to other lines
+      const firstLine = rawBuffer.subarray(0, width * spaceBytes.length);
+      let offset = width * spaceBytes.length;
+      
+      for (let i = 1; i < height; i++) {
+        rawBuffer.set(newlineBytes, offset);
+        offset += newlineBytes.length;
+        rawBuffer.set(firstLine, offset);
+        offset += firstLine.length;
+      }
+      
+      const result = decoder.decode(rawBuffer.subarray(0, offset));
+      releaseBuffer(bufferManager, buffer);
+      return fn.bgRgb(0, 0, 0)(result);
+    } catch (error) {
+      releaseBuffer(bufferManager, buffer);
+      throw error;
     }
-    
-    // Copy first line to other lines
-    const firstLine = state.buffer.subarray(0, lineSize);
-    let offset = lineSize;
-    
-    for (let i = 1; i < height; i++) {
-      state.buffer.set(newlineBytes, offset);
-      offset += newlineBytes.length;
-      state.buffer.set(firstLine, offset);
-      offset += lineSize;
-    }
-    
-    return fn.bgRgb(0, 0, 0)(decoder.decode(state.buffer.subarray(0, totalSize)));
   };
 
   fn.bgColorBlock = (color: RGBTuple, width: number = 1, height: number = 1) => {
-    const spaceBytes = encoder.encode(' ');
-    const lineBytes = new Uint8Array(spaceBytes.length * width);
+    const buffer = acquireBuffer(bufferManager, 'raw', width * spaceBytes.length + (height - 1), height);
+    const rawBuffer = buffer.data as Uint8Array;
     
-    for (let i = 0; i < width; i++) {
-      lineBytes.set(spaceBytes, i * spaceBytes.length);
+    try {
+      // Create first line
+      for (let i = 0; i < width; i++) {
+        rawBuffer.set(spaceBytes, i * spaceBytes.length);
+      }
+      
+      const line = decoder.decode(rawBuffer.subarray(0, width * spaceBytes.length));
+      const lines = Array(height).fill(line);
+      
+      releaseBuffer(bufferManager, buffer);
+      return fn.bgRgb(color[0], color[1], color[2])(lines.join(Bun.env.OS === 'windows' ? '\r\n' : '\n'));
+    } catch (error) {
+      releaseBuffer(bufferManager, buffer);
+      throw error;
     }
-    
-    const line = decoder.decode(lineBytes);
-    const lines = Array(height).fill(line);
-    
-    return fn.bgRgb(color[0], color[1], color[2])(lines.join(Bun.env.OS === 'windows' ? '\r\n' : '\n'));
   };
 
-  fn.gradientBlock = (colors: GradientColor[], width: number = 1, height: number = 1) => {
+  fn.gradientBlock = (
+    colors: GradientColor[], 
+    width: number = 1, 
+    height: number = 1,
+    options?: GradientOptions
+  ) => {
     const blockChar = '█';
-    const blockBytes = encoder.encode(blockChar);
-    const lineBytes = new Uint8Array(blockBytes.length * width);
-    
-    for (let i = 0; i < width; i++) {
-      lineBytes.set(blockBytes, i * blockBytes.length);
-    }
-    
-    const line = decoder.decode(lineBytes);
+    const line = blockChar.repeat(width);
     const lines = Array(height).fill(line);
     
-    return fn.gradient(...colors)(lines.join(Bun.env.OS === 'windows' ? '\r\n' : '\n'));
+    return fn.gradient(colors, {
+      direction: 'horizontal',
+      ...options
+    })(lines.join(Bun.env.OS === 'windows' ? '\r\n' : '\n'));
   };
+
+  // Export animation functions and manager
+  fn.animations = {
+    create: (width?: number, height?: number) => createScreen({ width: width || 80, height: height || 24 }),
+    start: startScreen,
+    stop: stopScreen,
+    setCell
+  };
+
+  fn.compose = (animations: Animation[], type: 'sequence' | 'parallel') => 
+    composeAnimations(animations, type);
+    
+  fn.transition = (from: string, to: string, color: RGB) => 
+    transition(from, to, color);
 
   return fn;
 }
 
 export const bunhance = createStyleFunction();
 export type { StyleConfig, StyleFunction, ANSICode, GradientColor, RGB };
+export { composeAnimations } from './animation/engine';
+export { transition } from './animation/effects';
+export type { AnimationStateMetrics } from './types/animation';
