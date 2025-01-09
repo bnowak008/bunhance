@@ -1,126 +1,193 @@
-import { ANSI_CODES } from './ansi';
-import type { EasingFunction } from './easing';
+import { ANSI_CODES } from './styles/ansi';
+import { start, stop } from './animation';
 
-// Core types
 export type ANSICode = keyof typeof ANSI_CODES;
-export type Modifier = 'bold' | 'italic' | 'underline' | 'dim' | 'blink' | 'inverse' | 'hidden' | 'strikethrough';
 
-export interface RGB {
-  readonly r: number;
-  readonly g: number;
-  readonly b: number;
-}
+/**
+ * RGB color type
+ */
+export type RGB = {
+  r: number;
+  g: number;
+  b: number;
+};
 
-export type RGBTuple = readonly [number, number, number];
-export type GradientColor = HexColor | NamedColor | RGB | HSL | HSLTuple | RGBTuple;
+// Add RGBTuple type
+export type RGBTuple = [number, number, number];
 
-// Configuration types
-export interface StyleConfig {
+/**
+ * Animation effect options
+ */
+export type AnimationEffectOptions = {
+  fps?: number;
+  duration?: number;
+  delay?: number;
+  iterations?: number;
+  repeat?: number;
+  yoyo?: boolean;
+  easing?: (t: number) => number;
+  onStart?: () => void;
+  onComplete?: () => void;
+  onUpdate?: () => void;
+  steps?: number;
+  transform?: {
+    direction?: 'left' | 'right';
+    maxWidth?: number;
+    minBrightness?: number;
+    maxBrightness?: number;
+  };
+};
+
+/**
+ * Animation recovery options
+ */
+export type AnimationRecoveryOptions = {
+  maxRetries: number;
+  retryDelay: number;
+  onError?: (error: Error) => void;
+  fallbackAnimation?: () => Promise<void>;
+};
+
+/**
+ * Animation state
+ */
+export type AnimationState = {
+  id: string;
+  isRunning: boolean;
+  startTime: number;
+  currentFrame: number;
+  frameBuffer?: Uint8Array;
+  metrics?: AnimationMetrics;
+  state: 'pending' | 'running' | 'paused' | 'completed';
+};
+
+/**
+ * Animation instance
+ */
+export type AnimationInstance = {
+  id: string;
   text: string;
-  color?: ANSICode;
-  rgb?: RGBTuple;
-  hsl?: HSLTuple;
-  bgHsl?: HSLTuple;
-  bgRgb?: RGBTuple;
+  color: RGB;
+  options: Required<AnimationEffectOptions>;
+  renderFrame: (progress: number, text: string, color: RGB, buffer: Uint8Array) => string;
+  onComplete?: () => void;
+  state: AnimationState;
+  startTime: number;
+  progress: number;
+  frameBuffer: Uint8Array;
+};
+
+/**
+ * Animation metrics
+ */
+export type AnimationMetrics = {
+  droppedFrames: number;
+  frameTime: number;
+  bufferSize: number;
+  currentAnimations: number;
+  queueSize: number;
+  fps: number;
+  memoryUsage: number;
+  frameCount: number;
+  lastFrameTimestamp: number;
+};
+
+/**
+ * Style configuration
+ */
+export type StyleConfig = {
+  text: string;
+  color?: string;
+  bgColor?: string;
+  rgb?: [number, number, number];
+  bgRgb?: [number, number, number];
   color256?: number;
   bgColor256?: number;
-  gradient?: readonly ColorInput[];
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
   dim?: boolean;
-  blink?: boolean;
-  inverse?: boolean;
   hidden?: boolean;
+  reverse?: boolean;
+  blink?: boolean;
   strikethrough?: boolean;
-}
-
-// Function types
-export interface StyleFunction {
-  (text: string): string;
-  (config: StyleConfig): string;
-  rgb(r: number, g: number, b: number): StyleFunction;
-  hsl(h: number, s: number, l: number): StyleFunction;
-  bgHsl(h: number, s: number, l: number): StyleFunction;
-  bgRgb(r: number, g: number, b: number): StyleFunction;
-  color256(code: number): StyleFunction;
-  bgColor256(code: number): StyleFunction;
-  gradient(...colors: ColorInput[]): StyleFunction;
-  apply(text: string): string;
-  [key: string]: StyleFunction | any;
-}
-
-export type HexColor = `#${string}`;
-export type NamedColor = keyof typeof ANSI_CODES;
-export type ColorValue = HexColor | NamedColor | RGB;
-
-export interface ThemeConfig extends Omit<StyleConfig, 'text'> {
-  extends?: string;
-}
-
-export interface Theme {
-  [key: string]: ThemeConfig;
-}
-
-// Add these new types
-export interface HSL {
-  readonly h: number;
-  readonly s: number;
-  readonly l: number;
-}
-
-export type HSLTuple = readonly [number, number, number];
-export type ColorInput = HexColor | NamedColor | RGB | HSL | HSLTuple | RGBTuple;
-
-export interface Frame {
-  text: string;
-  color: RGB;
-  duration?: number;
-}
-
-export interface AnimationOptions {
-  fps?: number;
-  loop?: boolean;
-  autoplay?: boolean;
-}
-
-export interface ColorTransition {
-  from: RGB;
-  to: RGB;
-  steps?: number;
-}
-
-// Add these new types for complex animations
-export interface MatrixConfig {
-  chars?: string[];
-  speed?: number;
-  density?: number;
-  fadeLength?: number;
-  fps?: number;
-}
-
-export interface SparkleConfig {
-  chars?: string[];
-  frequency?: number;
-  duration?: number;
-  fps?: number;
-}
-
-export type TransformConfig = {
-  direction?: 'left' | 'right';
-  scale?: number;
-  maxWidth?: number;
-  minBrightness?: number;
-  maxBrightness?: number;
 };
 
-// Update AnimationEffectOptions
-export interface AnimationEffectOptions {
-  duration?: number;
-  easing?: EasingFunction;
-  steps?: number;
-  transform?: TransformConfig;
-  matrix?: MatrixConfig;
-  sparkle?: SparkleConfig;
-  fps?: number;
-}
+/**
+ * Gradient color type
+ */
+export type GradientColor = RGB | RGBTuple | string | number;
+
+/**
+ * Style function type
+ */
+export type StyleFunction = {
+  (text: string): string;
+  (config: StyleConfig): string;
+  
+  // Color methods
+  rgb(r: number, g: number, b: number): StyleFunction;
+  bgRgb(r: number, g: number, b: number): StyleFunction;
+  hsl(h: number, s: number, l: number): StyleFunction;
+  bgHsl(h: number, s: number, l: number): StyleFunction;
+  color256(code: number): StyleFunction;
+  bgColor256(code: number): StyleFunction;
+  gradient(...colors: GradientColor[]): StyleFunction;
+  
+  // Basic colors
+  red: StyleFunction;
+  green: StyleFunction;
+  blue: StyleFunction;
+  yellow: StyleFunction;
+  magenta: StyleFunction;
+  cyan: StyleFunction;
+  white: StyleFunction;
+  black: StyleFunction;
+  
+  // Style modifiers
+  bold: StyleFunction;
+  dim: StyleFunction;
+  italic: StyleFunction;
+  underline: StyleFunction;
+  blink: StyleFunction;
+  inverse: StyleFunction;
+  hidden: StyleFunction;
+  strikethrough: StyleFunction;
+  
+  // Animation methods
+  rainbow(text: string, options?: AnimationEffectOptions): AnimationState;
+  pulse(text: string, color: RGB, options?: AnimationEffectOptions): AnimationState;
+  wave(text: string, color: RGB, options?: AnimationEffectOptions): AnimationState;
+  type(text: string, color: RGB, options?: AnimationEffectOptions): AnimationState;
+  glitch(text: string, color: RGB, intensity?: number, options?: AnimationEffectOptions): AnimationState;
+  sparkle(text: string, color: RGB, options?: AnimationEffectOptions): AnimationState;
+  zoom(text: string, color: RGB, options?: AnimationEffectOptions): AnimationState;
+  rotate(text: string, color: RGB, options?: AnimationEffectOptions): AnimationState;
+  slide(text: string, color: RGB, options?: AnimationEffectOptions): AnimationState;
+  
+  // Animation control
+  start(state: AnimationState): void;
+  stop(state: AnimationState): void;
+  
+  // Block methods
+  block(width?: number, height?: number): string;
+  colorBlock(color: RGBTuple, width?: number, height?: number): string;
+  bgBlock(width?: number, height?: number): string;
+  bgColorBlock(color: RGBTuple, width?: number, height?: number): string;
+  gradientBlock(colors: GradientColor[], width?: number, height?: number): string;
+  
+  // Cleanup
+  cleanup(): void;
+};
+
+/**
+ * Theme configuration
+ */
+export type ThemeConfig = StyleConfig & {
+  extends?: string;
+};
+
+/**
+ * Theme type
+ */
+export type Theme = Record<string, ThemeConfig>; 

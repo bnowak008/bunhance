@@ -1,39 +1,77 @@
-import { ANSI_CODES, rgb, bgRgb, color256, bgColor256 } from "./ansi";
-import { generateGradient } from "./gradient";
-import { getStyle, setStyle } from "./cache";
-import { validateRGB, validate256Color } from "./validation";
-import type { StyleConfig, StyleFunction, ANSICode, GradientColor, RGB, RGBTuple, AnimationEffectOptions } from "./types";
+import { ANSI_CODES, rgb, bgRgb, color256, bgColor256 } from "./styles/ansi";
+import { generateGradient } from "./color/gradient";
+import { getStyle, setStyle } from "./core/cache";
+import { validateRGB, validate256Color, validateBufferSize } from "./utils/validation";
+import type { StyleConfig, StyleFunction, GradientColor, RGB, RGBTuple, AnimationEffectOptions } from "./types";
 import { hslToRgb } from "./color";
-import { rainbow, pulse, wave, typeAnim, glitch, sparkle, zoom, rotate, slide, start, stop } from "./animation";
+import { rainbow, pulse, wave, type, glitch, sparkle, zoom, rotate, slide, start, stop } from "./animation";
+import { createBlock, createBgBlock, createBgColorBlock, createGradientBlock } from "./styles/blocks";
 
+/**
+ * Constants for buffer management
+ */
+const INITIAL_BUFFER_SIZE = 1024;
+const MAX_BUFFER_SIZE = 1024 * 1024 * 10; // 10MB maximum buffer size
+
+/**
+ * Creates a style function with internal state management and buffer optimization.
+ * The returned function can be used to apply ANSI styles to text strings.
+ * 
+ * @returns A StyleFunction that can be used to apply various text styles
+ */
 function createStyleFunction(): StyleFunction {
-  // Use static encoder/decoder for better performance
+  // Pre-allocate encoders and buffers for performance
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
-  
-  // Pre-allocate common buffers for better performance
   const resetBytes = encoder.encode(ANSI_CODES.reset);
-  const spaceBytes = encoder.encode(' ');
-  const blockBytes = encoder.encode('█');
-  const newlineBytes = encoder.encode(Bun.env.OS === 'windows' ? '\r\n' : '\n');
   
+  /**
+   * Internal state management for styles and buffer allocation
+   */
   const state = {
     styles: [] as string[],
     gradientColors: undefined as readonly GradientColor[] | undefined,
-    // Pre-allocate a buffer for string operations
-    buffer: new Uint8Array(1024), // Initial size, will grow if needed
-    bufferView: new DataView(new ArrayBuffer(1024))
+    buffer: new Uint8Array(INITIAL_BUFFER_SIZE),
+    bufferView: new DataView(new ArrayBuffer(INITIAL_BUFFER_SIZE))
   };
 
-  // Helper function to ensure buffer size
+  /**
+   * Ensures the internal buffer has sufficient capacity.
+   * Grows the buffer if needed, with size limits and validation.
+   * 
+   * @param needed - The required buffer size in bytes
+   * @throws Error if buffer allocation would exceed maximum size
+   */
   function ensureBufferSize(needed: number) {
     if (state.buffer.length < needed) {
       const newSize = Math.max(needed, state.buffer.length * 2);
-      state.buffer = new Uint8Array(newSize);
-      state.bufferView = new DataView(state.buffer.buffer);
+      validateBufferSize(newSize, MAX_BUFFER_SIZE);
+      
+      try {
+        state.buffer = new Uint8Array(newSize);
+        state.bufferView = new DataView(state.buffer.buffer);
+      } catch (error: any) {
+        throw new Error(`Failed to allocate buffer of size ${newSize}: ${error.message}`);
+      }
     }
   }
 
+  /**
+   * Releases the current buffer and allocates a new minimum-sized buffer.
+   * Useful for freeing memory after large operations.
+   */
+  function releaseBuffer(): void {
+    state.buffer = new Uint8Array(INITIAL_BUFFER_SIZE);
+    state.bufferView = new DataView(state.buffer.buffer);
+  }
+
+  /**
+   * Applies the current styles to the input text.
+   * Handles gradients, caching, and efficient byte operations.
+   * 
+   * @param text - The text to style
+   * @returns The styled text string
+   */
   function apply(text: string): string {
     if (state.gradientColors) {
       const result = generateGradient(state.gradientColors, text);
@@ -82,7 +120,7 @@ function createStyleFunction(): StyleFunction {
     state.gradientColors = undefined;
 
     if (config.color && config.color in ANSI_CODES) {
-      state.styles.push(ANSI_CODES[config.color]);
+      state.styles.push(ANSI_CODES[config.color as keyof typeof ANSI_CODES]);
     }
     if (config.rgb) {
       state.styles.push(rgb(config.rgb[0], config.rgb[1], config.rgb[2]));
@@ -103,7 +141,7 @@ function createStyleFunction(): StyleFunction {
     if (config.underline) state.styles.push(ANSI_CODES.underline);
     if (config.dim) state.styles.push(ANSI_CODES.dim);
     if (config.blink) state.styles.push(ANSI_CODES.blink);
-    if (config.inverse) state.styles.push(ANSI_CODES.inverse);
+    if (config.reverse) state.styles.push(ANSI_CODES.inverse);
     if (config.hidden) state.styles.push(ANSI_CODES.hidden);
     if (config.strikethrough) state.styles.push(ANSI_CODES.strikethrough);
 
@@ -119,7 +157,7 @@ function createStyleFunction(): StyleFunction {
           state.gradientColors = undefined;
           return fn;
         }
-        state.styles.push(ANSI_CODES[key as ANSICode]);
+        state.styles.push(ANSI_CODES[key as keyof typeof ANSI_CODES]);
         return fn;
       }
     });
@@ -181,7 +219,7 @@ function createStyleFunction(): StyleFunction {
   };
 
   fn.type = (text: string, color: RGB, options?: AnimationEffectOptions) => {
-    return typeAnim(text, color, options);
+    return type(text, color, options);
   };
 
   fn.glitch = (text: string, color: RGB, intensity?: number, options?: AnimationEffectOptions) => {
@@ -210,28 +248,12 @@ function createStyleFunction(): StyleFunction {
 
   // Block creation methods
   fn.block = (width: number = 1, height: number = 1) => {
-    const lineSize = blockBytes.length * width;
-    const totalSize = lineSize * height + (height - 1) * newlineBytes.length;
-    
-    ensureBufferSize(totalSize);
-    
-    // Create first line
-    for (let i = 0; i < width; i++) {
-      state.buffer.set(blockBytes, i * blockBytes.length);
+    try {
+      return fn(createBlock(width, height, state.buffer));
+    } catch (error) {
+      releaseBuffer(); // Reset buffer on error
+      throw error;
     }
-    
-    // Copy first line to other lines
-    const firstLine = state.buffer.subarray(0, lineSize);
-    let offset = lineSize;
-    
-    for (let i = 1; i < height; i++) {
-      state.buffer.set(newlineBytes, offset);
-      offset += newlineBytes.length;
-      state.buffer.set(firstLine, offset);
-      offset += lineSize;
-    }
-    
-    return fn(decoder.decode(state.buffer.subarray(0, totalSize)));
   };
 
   fn.colorBlock = (color: RGBTuple, width: number = 1, height: number = 1) => {
@@ -239,61 +261,27 @@ function createStyleFunction(): StyleFunction {
   };
 
   fn.bgBlock = (width: number = 1, height: number = 1) => {
-    const lineSize = spaceBytes.length * width;
-    const totalSize = lineSize * height + (height - 1) * newlineBytes.length;
-    
-    ensureBufferSize(totalSize);
-    
-    // Create first line
-    for (let i = 0; i < width; i++) {
-      state.buffer.set(spaceBytes, i * spaceBytes.length);
+    try {
+      return fn.bgRgb(0, 0, 0)(createBgBlock(width, height, state.buffer));
+    } catch (error) {
+      releaseBuffer(); // Reset buffer on error
+      throw error;
     }
-    
-    // Copy first line to other lines
-    const firstLine = state.buffer.subarray(0, lineSize);
-    let offset = lineSize;
-    
-    for (let i = 1; i < height; i++) {
-      state.buffer.set(newlineBytes, offset);
-      offset += newlineBytes.length;
-      state.buffer.set(firstLine, offset);
-      offset += lineSize;
-    }
-    
-    return fn.bgRgb(0, 0, 0)(decoder.decode(state.buffer.subarray(0, totalSize)));
   };
 
   fn.bgColorBlock = (color: RGBTuple, width: number = 1, height: number = 1) => {
-    const spaceBytes = encoder.encode(' ');
-    const lineBytes = new Uint8Array(spaceBytes.length * width);
-    
-    for (let i = 0; i < width; i++) {
-      lineBytes.set(spaceBytes, i * spaceBytes.length);
-    }
-    
-    const line = decoder.decode(lineBytes);
-    const lines = Array(height).fill(line);
-    
-    return fn.bgRgb(color[0], color[1], color[2])(lines.join(Bun.env.OS === 'windows' ? '\r\n' : '\n'));
+    return fn.bgRgb(color[0], color[1], color[2])(createBgColorBlock(color, width, height));
   };
 
   fn.gradientBlock = (colors: GradientColor[], width: number = 1, height: number = 1) => {
-    const blockChar = '█';
-    const blockBytes = encoder.encode(blockChar);
-    const lineBytes = new Uint8Array(blockBytes.length * width);
-    
-    for (let i = 0; i < width; i++) {
-      lineBytes.set(blockBytes, i * blockBytes.length);
-    }
-    
-    const line = decoder.decode(lineBytes);
-    const lines = Array(height).fill(line);
-    
-    return fn.gradient(...colors)(lines.join(Bun.env.OS === 'windows' ? '\r\n' : '\n'));
+    return fn.gradient(...colors)(createGradientBlock(width, height));
   };
+
+  // Add cleanup method to the style function
+  fn.cleanup = releaseBuffer;
 
   return fn;
 }
 
 export const bunhance = createStyleFunction();
-export type { StyleConfig, StyleFunction, ANSICode, GradientColor, RGB };
+export type { StyleConfig, StyleFunction, GradientColor, RGB };
