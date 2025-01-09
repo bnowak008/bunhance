@@ -22,128 +22,85 @@ async function demo() {
   console.log(bunhance.dim("A showcase of terminal styling capabilities\n"));
   await sleep(2000);
 
-  // // Basic Colors
-  // console.log(bunhance.bold("1. Basic Colors:"));
-  // console.log(bunhance.red("■ Red"));
-  // console.log(bunhance.green("■ Green"));
-  // console.log(bunhance.blue("■ Blue"));
-  // console.log(bunhance.yellow("■ Yellow"));
-  // console.log(bunhance.magenta("■ Magenta"));
-  // console.log(bunhance.cyan("■ Cyan"));
-  // console.log(bunhance.white("■ White\n"));
-  // await sleep(2000);
-
-  // // Style Combinations
-  // console.log(bunhance.bold("2. Style Combinations:"));
-  // console.log(bunhance.red.bold("Red Bold"));
-  // console.log(bunhance.blue.underline("Blue Underline"));
-  // console.log(bunhance.green.italic("Green Italic"));
-  // console.log(bunhance.yellow.dim("Yellow Dim"));
-  // console.log(bunhance.magenta.bold.underline("Magenta Bold Underline\n"));
-  // await sleep(2000);
-
-  // // RGB and HSL Colors
-  // console.log(bunhance.bold("3. Custom Colors:"));
-  // console.log(bunhance.rgb(255, 100, 0)("■ RGB Orange"));
-  // console.log(bunhance.rgb(128, 0, 255)("■ RGB Purple"));
-  // console.log(bunhance.hsl(280, 100, 50)("■ HSL Purple"));
-  // console.log(bunhance.hsl(180, 100, 50)("■ HSL Cyan\n"));
-  // await sleep(2000);
-
-  // // Gradients
-  // console.log(bunhance.bold("4. Gradients:"));
-  // console.log(bunhance.gradient("#ff0000", "#00ff00")("Red to Green"));
-  // console.log(bunhance.gradient("blue", "#800080")("Blue to Purple"));
-  // console.log(bunhance.gradient("#ff0000", "#00ff00", "#0000ff")("Rainbow"));
-  // console.log(bunhance.gradient("cyan", "magenta")("Cyan to Magenta\n"));
-  // await sleep(2000);
-
-  // // Color Blocks
-  // console.log(bunhance.bold("5. Color Blocks:"));
-  
-  // // Simple blocks
-  // console.log("Single-color blocks:");
-  // console.log(bunhance.colorBlock([255, 0, 0], 10, 2), " Red block");
-  // console.log(bunhance.colorBlock([0, 255, 0], 10, 2), " Green block");
-  // console.log(bunhance.colorBlock([0, 0, 255], 10, 2), " Blue block\n");
-  // await sleep(2000);
-
-  // // Background blocks
-  // console.log("Background blocks:");
-  // console.log(bunhance.bgColorBlock([255, 0, 0], 10, 2), " Red background");
-  // console.log(bunhance.bgColorBlock([0, 255, 0], 10, 2), " Green background");
-  // console.log(bunhance.bgColorBlock([0, 0, 255], 10, 2), " Blue background\n");
-  // await sleep(2000);
-
-  // // Gradient blocks
-  // console.log("Gradient blocks:");
-  // console.log(bunhance.gradientBlock([[255, 0, 0], [0, 255, 0]], 20, 2), " Red to Green");
-  // console.log(bunhance.gradientBlock([[0, 0, 255], [255, 0, 255]], 20, 2), " Blue to Magenta");
-  // console.log(bunhance.gradientBlock([[255, 0, 0], [0, 255, 0], [0, 0, 255]], 20, 2), " Rainbow\n");
-  // await sleep(2000);
-
-  // // Color palette demo
-  // console.log("Color palette:");
-  // const colors: [number, number, number][] = [
-  //   [255, 0, 0], [255, 127, 0], [255, 255, 0],
-  //   [0, 255, 0], [0, 255, 255], [0, 0, 255],
-  //   [255, 0, 255], [255, 192, 203], [128, 0, 0]
-  // ];
-  
-  // // Create a 3x3 grid of color blocks
-  // for (let row = 0; row < 3; row++) {
-  //   let line = "";
-  //   for (let col = 0; col < 3; col++) {
-  //     const color = colors[row * 3 + col];
-  //     line += bunhance.colorBlock(color, 5, 2) + " ";
-  //   }
-  //   console.log(line);
-  // }
-  // console.log("\n");
-  // await sleep(2000);
-
-  // Basic Block Test
-  console.log("\nBasic Block Test:");
-  
-  const WIDTH = 40;      // Total width
-  const BLOCK_WIDTH = 8; // Block width
-  const BLOCK_HEIGHT = 3; // Block height
-  
-  // Create a simple yellow block using block characters
-  const block = bunhance.colorBlock([255, 255, 0], BLOCK_WIDTH, BLOCK_HEIGHT);
-  
-  // Create empty space for padding
-  const padding = ' '.repeat(Math.floor((WIDTH - BLOCK_WIDTH) / 2));
-  
-  // Output with border to verify alignment
-  console.log('┌' + '─'.repeat(WIDTH) + '┐');
-  
-  // Add some empty lines above
-  for (let i = 0; i < 2; i++) {
-    console.log('│' + ' '.repeat(WIDTH) + '│');
-  }
-  
-  // Output the block with padding
-  const blockLines = block.split('\n').filter(line => line.length > 0);
-  for (const line of blockLines) {
-    // Add a space after the block to reset color, following the example pattern
-    console.log('│' + padding + line + ' ' + padding.slice(1) + '│');
-  }
-  
-  // Add some empty lines below
-  for (let i = 0; i < 2; i++) {
-    console.log('│' + ' '.repeat(WIDTH) + '│');
-  }
-  
-  console.log('└' + '─'.repeat(WIDTH) + '┘');
-  
-  console.log("\n");
+  // Basic Colors
+  console.log(bunhance.bold("1. Basic Colors:"));
+  console.log(bunhance.red("■ Red"));
+  console.log(bunhance.green("■ Green"));
+  console.log(bunhance.blue("■ Blue"));
+  console.log(bunhance.yellow("■ Yellow"));
+  console.log(bunhance.magenta("■ Magenta"));
+  console.log(bunhance.cyan("■ Cyan"));
+  console.log(bunhance.white("■ White\n"));
   await sleep(2000);
 
-  // Comment out the sunset scene for now
-  // // Sunset Scene
-  // console.log("\nBeautiful Sunset Scene:");
-  // ... rest of sunset scene code ...
+  // Style Combinations
+  console.log(bunhance.bold("2. Style Combinations:"));
+  console.log(bunhance.red.bold("Red Bold"));
+  console.log(bunhance.blue.underline("Blue Underline"));
+  console.log(bunhance.green.italic("Green Italic"));
+  console.log(bunhance.yellow.dim("Yellow Dim"));
+  console.log(bunhance.magenta.bold.underline("Magenta Bold Underline\n"));
+  await sleep(2000);
+
+  // RGB and HSL Colors
+  console.log(bunhance.bold("3. Custom Colors:"));
+  console.log(bunhance.rgb(255, 100, 0)("■ RGB Orange"));
+  console.log(bunhance.rgb(128, 0, 255)("■ RGB Purple"));
+  console.log(bunhance.hsl(280, 100, 50)("■ HSL Purple"));
+  console.log(bunhance.hsl(180, 100, 50)("■ HSL Cyan\n"));
+  await sleep(2000);
+
+  // Gradients
+  console.log(bunhance.bold("4. Gradients:"));
+  console.log(bunhance.gradient("#ff0000", "#00ff00")("Red to Green"));
+  console.log(bunhance.gradient("blue", "#800080")("Blue to Purple"));
+  console.log(bunhance.gradient("#ff0000", "#00ff00", "#0000ff")("Rainbow"));
+  console.log(bunhance.gradient("cyan", "magenta")("Cyan to Magenta\n"));
+  await sleep(2000);
+
+  // Color Blocks
+  console.log(bunhance.bold("5. Color Blocks:"));
+  
+  // Simple blocks
+  console.log("Single-color blocks:");
+  console.log(bunhance.colorBlock([255, 0, 0], 10, 2), " Red block");
+  console.log(bunhance.colorBlock([0, 255, 0], 10, 2), " Green block");
+  console.log(bunhance.colorBlock([0, 0, 255], 10, 2), " Blue block\n");
+  await sleep(2000);
+
+  // Background blocks
+  console.log("Background blocks:");
+  console.log(bunhance.bgColorBlock([255, 0, 0], 10, 2), " Red background");
+  console.log(bunhance.bgColorBlock([0, 255, 0], 10, 2), " Green background");
+  console.log(bunhance.bgColorBlock([0, 0, 255], 10, 2), " Blue background\n");
+  await sleep(2000);
+
+  // Gradient blocks
+  console.log("Gradient blocks:");
+  console.log(bunhance.gradientBlock([[255, 0, 0], [0, 255, 0]], 20, 2), " Red to Green");
+  console.log(bunhance.gradientBlock([[0, 0, 255], [255, 0, 255]], 20, 2), " Blue to Magenta");
+  console.log(bunhance.gradientBlock([[255, 0, 0], [0, 255, 0], [0, 0, 255]], 20, 2), " Rainbow\n");
+  await sleep(2000);
+
+  // Color palette demo
+  console.log("Color palette:");
+  const colors: [number, number, number][] = [
+    [255, 0, 0], [255, 127, 0], [255, 255, 0],
+    [0, 255, 0], [0, 255, 255], [0, 0, 255],
+    [255, 0, 255], [255, 192, 203], [128, 0, 0]
+  ];
+  
+  // Create a 3x3 grid of color blocks
+  for (let row = 0; row < 3; row++) {
+    let line = "";
+    for (let col = 0; col < 3; col++) {
+      const color = colors[row * 3 + col];
+      line += bunhance.colorBlock(color, 5, 2) + " ";
+    }
+    console.log(line);
+  }
+  console.log("\n");
+  await sleep(2000);
 
   // Animations
   console.log(bunhance.bold("6. Animations:"));
